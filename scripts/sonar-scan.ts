@@ -58,7 +58,31 @@ function getCurrentBranch(): string {
   }
 }
 
-function getChangedFiles(branchName: string): string[] {
+function getBaseBranch(): string {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--base" || a === "--against" || a === "--target") {
+      if (args[i + 1] && !args[i + 1].startsWith("-")) return args[i + 1];
+    }
+    if (a.startsWith("--base=") || a.startsWith("--against=") || a.startsWith("--target=")) {
+      const val = a.split("=")[1];
+      if (val) return val;
+    }
+    if (a.startsWith("--diff=") && a.split("=")[1]) return a.split("=")[1];
+  }
+  if (process.env.SONAR_BASE_BRANCH?.trim()) return process.env.SONAR_BASE_BRANCH.trim();
+  try {
+    const ref = execSync("/usr/bin/git symbolic-ref refs/remotes/origin/HEAD", {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const branch = ref.replace(/^refs\/remotes\/origin\//, "");
+    if (branch) return branch;
+  } catch {}
+  return "main";
+}
+
+function getChangedFiles(branchName: string, baseBranch: string): string[] {
   const runGit = (gitArgs: string) => {
     try {
       return execSync(`/usr/bin/git ${gitArgs}`, {
@@ -78,26 +102,18 @@ function getChangedFiles(branchName: string): string[] {
     ...runGit("diff --name-only HEAD"),
   ]);
 
-  if (branchName && branchName !== "main" && branchName !== "local") {
-    const diff = runGit("diff --name-only origin/main...HEAD");
-    for (const f of diff.length ? diff : runGit("diff --name-only main...HEAD")) files.add(f);
+  if (branchName && branchName !== "local") {
+    let diff = runGit(`diff --name-only origin/${baseBranch}...HEAD`);
+    if (!diff.length && branchName !== baseBranch) diff = runGit(`diff --name-only ${baseBranch}...HEAD`);
+    if (!diff.length) {
+      const u = runGit("rev-parse --abbrev-ref --symbolic-full-name @{u}")[0];
+      if (u) diff = runGit(`diff --name-only ${u}..HEAD`);
+    }
+    for (const f of diff) files.add(f);
   }
-
   const ignored = new Set([
-    ".lock",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".webp",
-    ".ico",
-    ".svg",
-    ".woff",
-    ".woff2",
-    ".ttf",
-    ".pdf",
-    ".zip",
-    ".gz",
+    ".lock", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico",
+    ".svg", ".woff", ".woff2", ".ttf", ".pdf", ".zip", ".gz",
   ]);
   return Array.from(files).filter((f) => {
     if (f.endsWith("pnpm-lock.yaml") || !existsSync(f)) return false;
@@ -125,7 +141,8 @@ async function deleteServerProject(key: string): Promise<void> {
   } catch {}
 }
 
-const changedFiles = isDiffMode ? getChangedFiles(branch) : [];
+const baseBranch = getBaseBranch();
+const changedFiles = isDiffMode ? getChangedFiles(branch, baseBranch) : [];
 if (isDiffMode && changedFiles.length === 0) {
   if (printJson) {
     console.log(
@@ -142,7 +159,7 @@ if (!exportOnly) {
   if (!printJson && !isSilent) {
     console.log(
       isDiffMode
-        ? `Starting SonarQube diff scan (${changedFiles.length} changed file(s)) [${baseProjectKey}]...`
+        ? `Starting SonarQube diff scan (${changedFiles.length} changed file(s) vs ${baseBranch}) [${baseProjectKey}]...`
         : `Starting SonarQube scan (branch: ${branch}) [${baseProjectKey}]...`,
     );
   }
@@ -157,9 +174,16 @@ if (!exportOnly) {
   const skip = new Set([
     "--export-only", "--json", "--strict", "--keep", "--persist", "--verbose",
     "-v", "--diff", "--quiet", "--quite", "-q", "--silent", "-s", "--summary",
+    "--base", "--against", "--target",
   ]);
-  for (const a of args) {
-    if (!skip.has(a)) scannerArgs.push(a);
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (skip.has(a)) {
+      if ((a === "--base" || a === "--against" || a === "--target") && i + 1 < args.length && !args[i + 1].startsWith("-")) i++;
+      continue;
+    }
+    if (a.startsWith("--base=") || a.startsWith("--against=") || a.startsWith("--target=") || a.startsWith("--diff=")) continue;
+    scannerArgs.push(a);
   }
 
   function findScannerBinary(): string {
