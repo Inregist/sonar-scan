@@ -47,12 +47,8 @@ const isDiffMode = args.includes("--diff");
 
 function getCurrentBranch(): string {
   try {
-    return execSync("/usr/bin/git rev-parse --abbrev-ref HEAD", {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-      .trim()
-      .replace(/[^a-zA-Z0-9_.-]/g, "-");
+    return execSync("/usr/bin/git rev-parse --abbrev-ref HEAD", { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
+      .trim().replace(/[^a-zA-Z0-9_.-]/g, "-");
   } catch {
     return "local";
   }
@@ -85,13 +81,8 @@ function getBaseBranch(): string {
 function getChangedFiles(branchName: string, baseBranch: string): string[] {
   const runGit = (gitArgs: string) => {
     try {
-      return execSync(`/usr/bin/git ${gitArgs}`, {
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      })
-        .split("\n")
-        .map((f) => f.trim())
-        .filter(Boolean);
+      return execSync(`/usr/bin/git ${gitArgs}`, { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
+        .split("\n").map((f) => f.trim()).filter(Boolean);
     } catch {
       return [];
     }
@@ -116,7 +107,11 @@ function getChangedFiles(branchName: string, baseBranch: string): string[] {
     ".svg", ".woff", ".woff2", ".ttf", ".pdf", ".zip", ".gz",
   ]);
   return Array.from(files).filter((f) => {
-    if (f.endsWith("pnpm-lock.yaml") || !existsSync(f)) return false;
+    if (
+      f.endsWith("pnpm-lock.yaml") || f.endsWith("routeTree.gen.ts") ||
+      f.includes("/test/") || f.includes("/tests/") ||
+      /\.(test|spec)\.[a-z0-9]+$/i.test(f) || !existsSync(f)
+    ) return false;
     try {
       if (!statSync(f).isFile()) return false;
     } catch {
@@ -169,6 +164,18 @@ if (!exportOnly) {
     `-Dsonar.projectName=${baseProjectKey} (${branch})`,
     "-Dsonar.qualitygate.wait=true",
   ];
+  const DEFAULT_EXCLUSIONS = "**/node_modules/**,**/dist/**,**/build/**,**/.wrangler/**,**/coverage/**,**/.tanstack/**,**/*.test.*,**/*.spec.*,**/test/**,**/tests/**,**/routeTree.gen.ts";
+  let hasExcl = args.some((a) => a.startsWith("-Dsonar.exclusions="));
+  let hasTestExcl = args.some((a) => a.startsWith("-Dsonar.test.exclusions="));
+  if (existsSync("sonar-project.properties")) {
+    try {
+      const props = readFileSync("sonar-project.properties", "utf-8");
+      if (!hasExcl) hasExcl = /^\s*sonar\.exclusions\s*=/m.test(props);
+      if (!hasTestExcl) hasTestExcl = /^\s*sonar\.test\.exclusions\s*=/m.test(props);
+    } catch {}
+  }
+  if (!hasExcl) scannerArgs.push(`-Dsonar.exclusions=${DEFAULT_EXCLUSIONS}`);
+  if (!hasTestExcl) scannerArgs.push("-Dsonar.test.exclusions=**/*");
   if (isDiffMode && changedFiles.length > 0)
     scannerArgs.push(`-Dsonar.inclusions=${changedFiles.join(",")}`);
   const skip = new Set([
