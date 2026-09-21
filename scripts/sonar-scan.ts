@@ -160,14 +160,18 @@ if (!exportOnly) {
     `-Dsonar.projectName=${baseProjectKey} (${branch})`,
     "-Dsonar.qualitygate.wait=true",
   ];
-  const DEFAULT_EXCLUSIONS = "**/node_modules/**,**/dist/**,**/build/**,**/.wrangler/**,**/coverage/**,**/.tanstack/**,**/routeTree.gen.ts";
-  let hasExcl = args.some((a) => a.startsWith("-Dsonar.exclusions="));
-  if (!hasExcl && existsSync("sonar-project.properties")) {
-    try {
-      hasExcl = /^\s*sonar\.exclusions\s*=/m.test(readFileSync("sonar-project.properties", "utf-8"));
-    } catch {}
+  const TEST_PATTERNS = "**/*.test.*,**/*.spec.*,**/test/**,**/tests/**";
+  const DEFAULT_EXCL = `**/node_modules/**,**/dist/**,**/build/**,**/.wrangler/**,**/coverage/**,**/.tanstack/**,**/routeTree.gen.ts,${TEST_PATTERNS}`;
+  let props = "";
+  if (existsSync("sonar-project.properties")) {
+    try { props = readFileSync("sonar-project.properties", "utf-8"); } catch {}
   }
-  if (!hasExcl) scannerArgs.push(`-Dsonar.exclusions=${DEFAULT_EXCLUSIONS}`);
+  const has = (flag: string, re: RegExp) => args.some((a) => a.startsWith(flag)) || re.test(props);
+  if (!has("-Dsonar.sources=", /^\s*sonar\.sources\s*=/m)) scannerArgs.push("-Dsonar.sources=.");
+  if (!has("-Dsonar.tests=", /^\s*sonar\.tests\s*=/m)) {
+    scannerArgs.push("-Dsonar.tests=.", `-Dsonar.test.inclusions=${TEST_PATTERNS}`);
+  }
+  if (!has("-Dsonar.exclusions=", /^\s*sonar\.exclusions\s*=/m)) scannerArgs.push(`-Dsonar.exclusions=${DEFAULT_EXCL}`);
   if (isDiffMode && changedFiles.length > 0)
     scannerArgs.push(`-Dsonar.inclusions=${changedFiles.join(",")}`);
   const skip = new Set([
