@@ -1,0 +1,6 @@
+[env]
+# SonarQube Server URL
+SONAR_HOST_URL = "https://sonar.example.com/"
+
+# Your personal SonarQube User Token (generate from SonarQube UI -> My Account -> Security)
+SONAR_TOKEN = "squ_your_personal_token_here"

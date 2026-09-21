@@ -1,0 +1,16 @@
+[tools]
+node = "lts"
+sonar-scanner-cli = "latest"
+jq = "latest"
+
+[tasks."scan:diff"]
+description = "Fast SonarQube diff scan on current repo"
+dir = "{{cwd}}"
+quiet = true
+run = "node {{config_root}}/scripts/sonar-scan.ts --diff"
+
+[tasks.scan]
+description = "Full SonarQube scan on current repo"
+dir = "{{cwd}}"
+quiet = true
+run = "node {{config_root}}/scripts/sonar-scan.ts"
