@@ -13,58 +13,69 @@ Fast SonarQube diff & full scan runner for Monorepos and Git projects.
 
 ## Installation & Setup Options
 
-Choose the setup pattern that fits your team's workflow:
+Choose the setup pattern that fits your workflow:
 
-### Option A: Per-Project Setup (Single Repository)
-If you only want `sonar-scan` configured in a specific repository:
+### Option A: Per-Project via Package Manager *(Cleanest for Single Projects)*
+Install directly into your repository as a development dependency without cloning anything extra:
 
 ```bash
-# 1. Clone sonar-scan anywhere (e.g. ~/.tools/sonar-scan)
-git clone git@github.com:inregist/sonar-scan.git ~/.tools/sonar-scan
-
-# 2. Run setup pointing to your project directory:
-~/.tools/sonar-scan/setup.sh --project /path/to/your-project
-
-# 3. Add your credentials to <your-project>/.mise.local.toml:
-# [env]
-# SONAR_HOST_URL = "https://sonar.your-team.com/"
-# SONAR_TOKEN = "squ_your_personal_token"
+cd your-project
+pnpm add -D github:inregist/sonar-scan
+# or: npm install -D github:inregist/sonar-scan
 ```
-*This configures the scanner, symlinks `scripts/sonar-scan.ts`, and adds `scan:diff` to that project's `.mise.toml`.*
+
+Add the scripts to your `package.json`:
+```json
+{
+  "scripts": {
+    "scan:diff": "sonar-scan --diff",
+    "scan": "sonar-scan"
+  }
+}
+```
+
+Add your credentials to `.mise.local.toml` or `.env.local`:
+```toml
+[env]
+SONAR_HOST_URL = "https://sonar.your-team.com/"
+SONAR_TOKEN = "squ_your_personal_token"
+```
 
 ---
 
-### Option B: Multi-Project Workspace Setup (All Projects in a Folder)
-If your team organizes repositories under a parent folder (like `~/work/` or `~/projects/`):
+### Option B: Workspace Setup *(Shared Across Projects in a Folder)*
+If your team keeps multiple repositories under a parent folder (e.g. `~/work/` or `~/projects/`):
 
 ```bash
-# 1. Clone into your parent directory as .sonar-scan (hidden)
+# 1. Clone into your parent directory
 git clone git@github.com:inregist/sonar-scan.git ~/work/.sonar-scan
 
-# 2. Run the setup script (defaults to the parent directory)
+# 2. Run the setup script
 ~/work/.sonar-scan/setup.sh
 
-# 3. Add credentials to ~/work/.mise.local.toml:
+# 3. Add your credentials to ~/work/.mise.local.toml:
 # [env]
 # SONAR_HOST_URL = "https://sonar.your-team.com/"
 # SONAR_TOKEN = "squ_your_personal_token"
 ```
-*Every current and future repository under `~/work/` automatically inherits `mise scan:diff`.*
+*Every current and future repository under that folder automatically inherits `mise scan:diff`.*
 
 ---
 
-### Option C: Global CLI (Run Anywhere Without Local Files)
-Install once globally on your machine:
+### Option C: Global CLI *(Zero Repo Files)*
+Install globally on your machine to use across any Git repository:
 
 ```bash
 npm install -g github:inregist/sonar-scan
 ```
-Set credentials in your shell profile (`~/.zshrc`, `~/.bashrc`, or `~/.config/mise/config.toml`):
+
+Configure credentials once in your shell profile (`~/.zshrc`, `~/.bashrc`, or `~/.config/mise/config.toml`):
 ```bash
 export SONAR_HOST_URL="https://sonar.your-team.com/"
 export SONAR_TOKEN="squ_your_personal_token"
 ```
-Then run in any Git repository:
+
+Run in any Git repository:
 ```bash
 sonar-scan --diff
 ```
@@ -78,6 +89,7 @@ In any configured project:
 ```bash
 # Fast diff scan (only modified & untracked files)
 mise scan:diff
+# (or if using npm scripts: pnpm scan:diff)
 
 # Silent mode (outputs nothing if clean, only lists issues if they exist)
 mise scan:diff --silent
@@ -88,7 +100,6 @@ mise scan
 
 ## Updating
 
-When updates are pushed to this repo:
-```bash
-git -C /path/to/.sonar-scan pull
-```
+- If installed via workspace: `git -C ~/work/.sonar-scan pull`
+- If installed via package manager: `pnpm update @inregist/sonar-scan`
+- If installed globally: `npm install -g github:inregist/sonar-scan@latest`
