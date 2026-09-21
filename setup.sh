@@ -2,16 +2,22 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORK_DIR="$(dirname "$SCRIPT_DIR")"
-TARGET_DIR="$WORK_DIR"
-MODE="workspace"
+TARGET_DIR="${PWD}"
+
+# If running directly from inside .sonar-scan, default to parent directory
+if [ "$TARGET_DIR" = "$SCRIPT_DIR" ]; then
+  TARGET_DIR="$(dirname "$SCRIPT_DIR")"
+fi
+
+MODE="project"
 
 usage() {
   echo "Usage: $0 [OPTIONS]"
   echo ""
   echo "Options:"
-  echo "  -p, --project <DIR>  Install into a specific project directory instead of the parent workspace"
-  echo "  -h, --help           Show this help message"
+  echo "  -p, --project <DIR>    Install into a specific project directory (default: current project)"
+  echo "  -w, --workspace [DIR]  Install into parent workspace for all sibling projects"
+  echo "  -h, --help             Show this help message"
   exit 0
 }
 
@@ -26,6 +32,16 @@ while [[ $# -gt 0 ]]; do
       MODE="project"
       shift 2
       ;;
+    -w|--workspace)
+      MODE="workspace"
+      if [ -n "${2:-}" ] && [[ ! "$2" =~ ^- ]]; then
+        TARGET_DIR="$(cd "$2" && pwd)"
+        shift 2
+      else
+        TARGET_DIR="$(dirname "$SCRIPT_DIR")"
+        shift
+      fi
+      ;;
     -h|--help)
       usage
       ;;
@@ -36,10 +52,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [ "$MODE" = "project" ]; then
-  echo "Configuring SonarQube scanner for project: $TARGET_DIR..."
-else
+if [ "$MODE" = "workspace" ]; then
   echo "Configuring SonarQube scanner for workspace: $TARGET_DIR (all subprojects)..."
+else
+  echo "Configuring SonarQube scanner for project: $TARGET_DIR..."
 fi
 
 # 1. Create scripts folder and symlink
@@ -139,6 +155,17 @@ EOF
   fi
 else
   echo "✓ Sonar credentials found."
+fi
+
+# 5. Automatically ensure project gitignore rules
+TARGET_GITIGNORE="$TARGET_DIR/.gitignore"
+if [ -f "$TARGET_GITIGNORE" ] && [ "$MODE" = "project" ]; then
+  for rule in ".sonar-scan" ".mise.local.toml" ".scannerwork" "sonar-report.json"; do
+    if ! grep -q "^$rule" "$TARGET_GITIGNORE"; then
+      echo "$rule" >> "$TARGET_GITIGNORE"
+    fi
+  done
+  echo "✓ Verified .gitignore rules in $TARGET_DIR"
 fi
 
 echo "✓ Setup complete! You can run 'mise scan:diff' in $TARGET_DIR."
